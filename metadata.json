@@ -1,8 +1,4 @@
 {
   "name": "Auth Root Plugin",
-  "version": "0.4",
-  "module": "plugins.auth_root",
-  "extract": false,
-  "depends_on": [],
-  "init_after": []
+  "version": "0.4"
 }

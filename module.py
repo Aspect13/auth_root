@@ -33,21 +33,20 @@ from .utils.token_manager import check_auth_token, clear_auth_token, get_auth_to
 class Module(module.ModuleModel):
     """ Pylon module """
 
-    def __init__(self, settings, root_path, context):
-        self.settings = settings
-        self.root_path = root_path
+    def __init__(self, context, descriptor):
         self.context = context
+        self.descriptor = descriptor
         self.rpc_prefix = None
+        #
+        self.settings = self.descriptor.config
 
     def init(self):
         """ Init module """
         log.info('Initializing module auth_root')
 
         self.rpc_prefix = self.settings['rpc_manager']['prefix']['root']
-        bp = flask.Blueprint(  # pylint: disable=C0103
-            'auth_root', 'plugins.auth_root',
-            root_path=self.root_path,
-            url_prefix=f'{self.context.url_prefix}/{self.settings["endpoints"]["root"]}/'
+        bp = self.descriptor.make_blueprint(
+            url_prefix=f'/{self.settings["endpoints"]["root"]}'
         )
         bp.add_url_rule('/auth', 'auth', self.auth)
         bp.add_url_rule('/me', 'me', self.me, methods=['GET'])
@@ -77,7 +76,7 @@ class Module(module.ModuleModel):
             if request.headers["X-Forwarded-Uri"].startswith("/static") and \
                     any(request.headers["X-Forwarded-Uri"].endswith(res) for res in [".ico", ".js", ".css"]):
                 return make_response("OK")
-        
+
         # Check if need to login
         target = request.args.get("target")
         scope = request.args.get("scope")
