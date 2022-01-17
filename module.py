@@ -49,6 +49,7 @@ class Module(module.ModuleModel):
             url_prefix=f'/{self.settings["endpoints"]["root"]}'
         )
         bp.add_url_rule('/auth', 'auth', self.auth)
+        bp.add_url_rule('/info/query', 'info', self.info)
         bp.add_url_rule('/me', 'me', self.me, methods=['GET'])
         bp.add_url_rule('/token', 'token', self.token)
         bp.add_url_rule('/login', 'login', self.login)
@@ -70,6 +71,32 @@ class Module(module.ModuleModel):
     def deinit(self):  # pylint: disable=R0201
         """ De-init module """
         log.info('De-initializing module auth_root')
+
+    def info(self):
+        target = request.args.get("target", "raw")
+        scope = request.args.get("scope", None)
+        #
+        result = dict()
+        #
+        try:
+            result = self.context.rpc_manager.call_function_with_timeout(
+                func='{prefix}{key}'.format(
+                    prefix=self.settings['rpc_manager']['prefix']['info'],
+                    key=target.lower()
+                ),
+                timeout=int(self.settings['rpc_manager']['timeout']),
+                scope=scope,
+            )
+        except Empty:
+            log.error(f'Cannot find mapper for auth_key {target}')
+            return make_response("KO", 403)
+        except (AttributeError, TypeError):
+            from traceback import format_exc
+            log.error(f"Failed to map auth data {format_exc()}")
+        except NameError:
+            return redirect(self.settings["login_default_redirect_url"])
+        #
+        return flask.jsonify(result)
 
     def auth(self):
         if "X-Forwarded-Uri" in request.headers:
