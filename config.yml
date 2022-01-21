@@ -13,3 +13,4 @@ rpc_manager:
     root: "auth_"
     mappers: "auth_mappers_"
     manager: "auth_manager_"
+    info: "auth_info_"

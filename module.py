@@ -33,23 +33,23 @@ from .utils.token_manager import check_auth_token, clear_auth_token, get_auth_to
 class Module(module.ModuleModel):
     """ Pylon module """
 
-    def __init__(self, settings, root_path, context):
-        self.settings = settings
-        self.root_path = root_path
+    def __init__(self, context, descriptor):
         self.context = context
+        self.descriptor = descriptor
         self.rpc_prefix = None
+        #
+        self.settings = self.descriptor.config
 
     def init(self):
         """ Init module """
         log.info('Initializing module auth_root')
 
         self.rpc_prefix = self.settings['rpc_manager']['prefix']['root']
-        bp = flask.Blueprint(  # pylint: disable=C0103
-            'auth_root', 'plugins.auth_root',
-            root_path=self.root_path,
-            url_prefix=f'{self.context.url_prefix}/{self.settings["endpoints"]["root"]}/'
+        bp = self.descriptor.make_blueprint(
+            url_prefix=f'/{self.settings["endpoints"]["root"]}'
         )
         bp.add_url_rule('/auth', 'auth', self.auth)
+        bp.add_url_rule('/info/query', 'info', self.info)
         bp.add_url_rule('/me', 'me', self.me, methods=['GET'])
         bp.add_url_rule('/token', 'token', self.token)
         bp.add_url_rule('/login', 'login', self.login)
@@ -72,12 +72,38 @@ class Module(module.ModuleModel):
         """ De-init module """
         log.info('De-initializing module auth_root')
 
+    def info(self):
+        target = request.args.get("target", "raw")
+        scope = request.args.get("scope", None)
+        #
+        result = dict()
+        #
+        try:
+            result = self.context.rpc_manager.call_function_with_timeout(
+                func='{prefix}{key}'.format(
+                    prefix=self.settings['rpc_manager']['prefix']['info'],
+                    key=target.lower()
+                ),
+                timeout=int(self.settings['rpc_manager']['timeout']),
+                scope=scope,
+            )
+        except Empty:
+            log.error(f'Cannot find mapper for auth_key {target}')
+            return make_response("KO", 403)
+        except (AttributeError, TypeError):
+            from traceback import format_exc
+            log.error(f"Failed to map auth data {format_exc()}")
+        except NameError:
+            return redirect(self.settings["login_default_redirect_url"])
+        #
+        return flask.jsonify(result)
+
     def auth(self):
         if "X-Forwarded-Uri" in request.headers:
             if request.headers["X-Forwarded-Uri"].startswith("/static") and \
                     any(request.headers["X-Forwarded-Uri"].endswith(res) for res in [".ico", ".js", ".css"]):
                 return make_response("OK")
-        
+
         # Check if need to login
         target = request.args.get("target")
         scope = request.args.get("scope")
